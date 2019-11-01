@@ -1,5 +1,8 @@
+#include "stdio.h"
 #include "descriptor_tables.h"
 #include "string.h"
+#include "io.h"
+#include "isr.h"
 
 #define GDT_ENTRIES_COUNT 5
 #define IDT_ENTRIES_COUNT 256
@@ -11,6 +14,7 @@ static void init_gdt();
 static void set_gdt_entry(uint8_t Entry, uint32_t Base, uint32_t Limit, uint8_t Access, uint8_t Granularity);
 static void init_idt();
 static void set_idt_entry(uint8_t Entry, uint32_t Offset, uint16_t Selector, uint8_t Flags);
+static void PIC_remap(int Offset1, int Offset2);
 
 extern void isr0();
 extern void isr1();
@@ -44,6 +48,23 @@ extern void isr28();
 extern void isr29();
 extern void isr30();
 extern void isr31();
+
+extern void irq0();
+extern void irq1();
+extern void irq2();
+extern void irq3();
+extern void irq4();
+extern void irq5();
+extern void irq6();
+extern void irq7();
+extern void irq8();
+extern void irq9();
+extern void irq10();
+extern void irq11();
+extern void irq12();
+extern void irq13();
+extern void irq14();
+extern void irq15();
 
 static gdt_descriptor gdt;
 static gdt_entry gdt_entries[GDT_ENTRIES_COUNT];
@@ -124,7 +145,29 @@ static void init_idt()
   set_idt_entry(30, (uint32_t)isr30, 0x08, 0x8E);
   set_idt_entry(31, (uint32_t)isr31, 0x08, 0x8E);
 
+  PIC_remap(0x20, 0x28);
+  
+  memset(interrupt_handlers, 0, 256);
+  
+  set_idt_entry(32, (uint32_t)irq0, 0x08, 0x8E);
+  set_idt_entry(33, (uint32_t)irq1, 0x08, 0x8E);
+  set_idt_entry(34, (uint32_t)irq2, 0x08, 0x8E);
+  set_idt_entry(35, (uint32_t)irq3, 0x08, 0x8E);
+  set_idt_entry(36, (uint32_t)irq4, 0x08, 0x8E);
+  set_idt_entry(37, (uint32_t)irq5, 0x08, 0x8E);
+  set_idt_entry(38, (uint32_t)irq6, 0x08, 0x8E);
+  set_idt_entry(39, (uint32_t)irq7, 0x08, 0x8E);
+  set_idt_entry(40, (uint32_t)irq8, 0x08, 0x8E);
+  set_idt_entry(41, (uint32_t)irq9, 0x08, 0x8E);
+  set_idt_entry(42, (uint32_t)irq10, 0x08, 0x8E);
+  set_idt_entry(43, (uint32_t)irq11, 0x08, 0x8E);
+  set_idt_entry(44, (uint32_t)irq12, 0x08, 0x8E);
+  set_idt_entry(45, (uint32_t)irq13, 0x08, 0x8E);
+  set_idt_entry(46, (uint32_t)irq14, 0x08, 0x8E);
+  set_idt_entry(47, (uint32_t)irq15, 0x08, 0x8E);
+
   load_idt(&idt);
+  asm volatile("sti");
 }
 
 static void set_idt_entry(uint8_t Entry, uint32_t Offset, uint16_t Selector, uint8_t Flags)
@@ -135,4 +178,28 @@ static void set_idt_entry(uint8_t Entry, uint32_t Offset, uint16_t Selector, uin
   idt_entries[Entry].Selector = Selector;
   idt_entries[Entry].Zero     = 0;
   idt_entries[Entry].Flags    = Flags;
+}
+
+static void PIC_remap(int Offset1, int Offset2)
+{
+  unsigned char Mask1 = inb(PIC1_DATA);
+  unsigned char Mask2 = inb(PIC2_DATA);
+
+  outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
+  outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
+  outb(PIC1_DATA, Offset1);
+  outb(PIC2_DATA, Offset2);
+  outb(PIC1_DATA, 4);
+  outb(PIC2_DATA, 2);
+
+  outb(PIC1_DATA, ICW4_8086);
+  outb(PIC2_DATA, ICW4_8086);
+
+  outb(PIC1_DATA, Mask1);
+  outb(PIC2_DATA, Mask2);
+}
+
+void register_interrupt_handler(uint8_t Entry, isr_p Handler)
+{
+  interrupt_handlers[Entry] = Handler;
 }
